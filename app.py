@@ -16,7 +16,6 @@ st.caption(f"Dati aggiornati al: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
 @st.cache_data(ttl=600)
 def load_data(ticker, period='2y'):
-    # --- MODIFICATO ---
     return yf.download(ticker, period=period, interval='1d', auto_adjust=True)
 
 spx_data = load_data('^GSPC')
@@ -28,12 +27,12 @@ if not spx_data.empty and not vix_data.empty:
     spx_data['SMA150'] = spx_data['Close'].rolling(window=150).mean()
 
     # --- SEZIONE MODIFICATA ---
-    # Estrai i valori più recenti come scalari usando .values[-1]
-    latest_spx = spx_data['Close'].values[-1]
-    latest_vix = vix_data['Close'].values[-1]
-    latest_sma90 = spx_data['SMA90'].values[-1]
-    latest_sma125 = spx_data['SMA125'].values[-1]
-    latest_sma150 = spx_data['SMA150'].values[-1]
+    # Estrai i valori e convertili esplicitamente in float
+    latest_spx = float(spx_data['Close'].values[-1])
+    latest_vix = float(vix_data['Close'].values[-1])
+    latest_sma90 = float(spx_data['SMA90'].values[-1])
+    latest_sma125 = float(spx_data['SMA125'].values[-1])
+    latest_sma150 = float(spx_data['SMA150'].values[-1])
     # --- FINE SEZIONE MODIFICATA ---
 
     col1, col2 = st.columns([3, 1])
