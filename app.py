@@ -47,18 +47,57 @@ with st.sidebar:
 # ─────────────────────────────────────────────────────────
 @st.cache_data(ttl=600, show_spinner=False)
 def load_data(ticker: str, period: str) -> pd.DataFrame:
+    """
+    Scarica dati da yfinance e restituisce sempre un DataFrame con:
+      - index: datetime tz-naive, ordinato, senza duplicati
+      - colonna unica 'Close' (float)
+    Gestisce sia colonne semplici sia MultiIndex (('Close', TICKER)).
+    """
     df = yf.download(ticker, period=period, interval="1d", auto_adjust=True)
     if df.empty:
         return df
-    df = df[["Close"]].copy()
-    df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
-    df = df.dropna(subset=["Close"])
-    df = df[~df.index.duplicated(keep="last")].sort_index()
+
+    # Se MultiIndex: prova a prendere ('Close', ticker) o 'Close' alla 2° level
+    if isinstance(df.columns, pd.MultiIndex):
+        close = None
+        if ("Close", ticker) in df.columns:
+            close = df[("Close", ticker)]
+        elif "Close" in df.columns.get_level_values(0):
+            # se c'è una sola colonna al livello 1, squeeze
+            sub = df.xs("Close", axis=1, level=0, drop_level=False)
+            close = sub.iloc[:, 0] if sub.shape[1] == 1 else sub.mean(axis=1)
+        elif ("Adj Close", ticker) in df.columns:
+            close = df[("Adj Close", ticker)]
+        else:
+            # fallback: prima colonna numerica disponibile
+            sub = df.droplevel(0, axis=1) if df.columns.nlevels > 1 else df
+            close = sub.select_dtypes(include="number").iloc[:, 0]
+    else:
+        # Colonne semplici
+        if "Close" in df.columns:
+            close = df["Close"]
+        elif "Adj Close" in df.columns:
+            close = df["Adj Close"]
+        else:
+            close = df.select_dtypes(include="number").iloc[:, 0]
+
+    # Assicura una Series 1-D
+    if isinstance(close, pd.DataFrame):
+        close = close.iloc[:, 0]
+
+    # Normalizza output
+    close = pd.to_numeric(close, errors="coerce")
+    out = pd.DataFrame({"Close": close}).dropna()
+    out = out[~out.index.duplicated(keep="last")].sort_index()
+
+    # Togli tz per Plotly
     try:
-        df.index = df.index.tz_localize(None)  # tz-naive per plotly
+        out.index = out.index.tz_localize(None)
     except Exception:
         pass
-    return df
+
+    return out
+
 
 spx = load_data("^GSPC", period)
 vix = load_data("^VIX", period)
