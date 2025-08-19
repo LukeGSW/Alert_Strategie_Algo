@@ -163,75 +163,77 @@ with k5: st.metric("SPX vs SMA150", f"{d_spx_sma150:.2f}%" if not np.isnan(d_spx
 st.divider()
 
 # ─────────────────────────────────────────────────────────
-# CHARTS
+# CHARTS — stacked (uno sopra l'altro, full width)
 # ─────────────────────────────────────────────────────────
-g1, g2 = st.columns([3, 2], gap="large")
 
-with g1:
-    st.subheader("SPX con SMA (90 / 125 / 150)")
-    fig_spx = go.Figure()
-    fig_spx.add_trace(go.Scatter(
-        x=spx.index, y=spx["Close"], name="SPX Close",
-        mode="lines", line=dict(color="#2E86C1", width=2)
-    ))
-    fig_spx.add_trace(go.Scatter(
-        x=spx.index, y=spx["SMA90"], name="SMA 90",
-        mode="lines", line=dict(color="#F39C12", dash="dot", width=1.5)
-    ))
-    fig_spx.add_trace(go.Scatter(
-        x=spx.index, y=spx["SMA125"], name="SMA 125",
-        mode="lines", line=dict(color="#8E44AD", dash="dot", width=1.5)
-    ))
-    fig_spx.add_trace(go.Scatter(
-        x=spx.index, y=spx["SMA150"], name="SMA 150",
-        mode="lines", line=dict(color="#E74C3C", dash="dot", width=1.5)
-    ))
-    fig_spx.update_layout(
-        height=420,
-        margin=dict(l=10, r=10, t=30, b=10),
-        xaxis=dict(
-            rangeslider=dict(visible=show_ranges),
-            rangebreaks=[dict(bounds=["sat", "mon"])]
-        ),
-        yaxis_title="Prezzo",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-    )
-    if show_ranges:
-        fig_spx.update_xaxes(
-            rangeselector=dict(
-                buttons=[
-                    dict(count=1, label="1m", step="month", stepmode="backward"),
-                    dict(count=3, label="3m", step="month", stepmode="backward"),
-                    dict(count=6, label="6m", step="month", stepmode="backward"),
-                    dict(count=1, label="YTD", step="year", stepmode="todate"),
-                    dict(count=1, label="1y", step="year", stepmode="backward"),
-                    dict(step="all")
-                ]
-            )
+st.subheader("SPX con SMA (90 / 125 / 150)")
+fig_spx = go.Figure()
+fig_spx.add_trace(go.Scatter(
+    x=spx.index, y=spx["Close"], name="SPX Close",
+    mode="lines", line=dict(color="#2E86C1", width=2)
+))
+fig_spx.add_trace(go.Scatter(
+    x=spx.index, y=spx["SMA90"], name="SMA 90",
+    mode="lines", line=dict(color="#F39C12", dash="dot", width=1.5)
+))
+fig_spx.add_trace(go.Scatter(
+    x=spx.index, y=spx["SMA125"], name="SMA 125",
+    mode="lines", line=dict(color="#8E44AD", dash="dot", width=1.5)
+))
+fig_spx.add_trace(go.Scatter(
+    x=spx.index, y=spx["SMA150"], name="SMA 150",
+    mode="lines", line=dict(color="#E74C3C", dash="dot", width=1.5)
+))
+fig_spx.update_layout(
+    height=420,
+    margin=dict(l=10, r=10, t=30, b=10),
+    hovermode="x unified",
+    xaxis=dict(
+        rangeslider=dict(visible=show_ranges),
+        rangebreaks=[dict(bounds=["sat", "mon"])]
+    ),
+    yaxis_title="Prezzo",
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+)
+if show_ranges:
+    fig_spx.update_xaxes(
+        rangeselector=dict(
+            buttons=[
+                dict(count=1, label="1m", step="month", stepmode="backward"),
+                dict(count=3, label="3m", step="month", stepmode="backward"),
+                dict(count=6, label="6m", step="month", stepmode="backward"),
+                dict(count=1, label="YTD", step="year", stepmode="todate"),
+                dict(count=1, label="1y", step="year", stepmode="backward"),
+                dict(step="all")
+            ]
         )
-    st.plotly_chart(fig_spx, use_container_width=True)
-
-with g2:
-    st.subheader("VIX con soglie 15 / 20")
-    fig_vix = go.Figure()
-    fig_vix.add_hrect(y0=15, y1=20, line_width=0, fillcolor="orange", opacity=0.08, layer="below")
-    fig_vix.add_trace(go.Scatter(
-        x=vix.index, y=vix["Close"], name="VIX Close",
-        mode="lines", line=dict(color="#16A085", width=2)
-    ))
-    fig_vix.add_hline(y=15, line_dash="dash", line_color="#F39C12", annotation_text="15")
-    fig_vix.add_hline(y=20, line_dash="dash", line_color="#E74C3C", annotation_text="20")
-    fig_vix.update_layout(
-        height=420,
-        margin=dict(l=10, r=10, t=30, b=10),
-        xaxis=dict(
-            rangeslider=dict(visible=show_ranges),
-            rangebreaks=[dict(bounds=["sat", "mon"])]
-        ),
-        yaxis_title="Indice",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     )
-    st.plotly_chart(fig_vix, use_container_width=True)
+st.plotly_chart(fig_spx, use_container_width=True)
+
+st.divider()
+
+st.subheader("VIX con soglie 15 / 20")
+fig_vix = go.Figure()
+# fascia 15–20 sotto la linea
+fig_vix.add_hrect(y0=15, y1=20, line_width=0, fillcolor="orange", opacity=0.08, layer="below")
+fig_vix.add_trace(go.Scatter(
+    x=vix.index, y=vix["Close"], name="VIX Close",
+    mode="lines", line=dict(color="#16A085", width=2)
+))
+fig_vix.add_hline(y=15, line_dash="dash", line_color="#F39C12", annotation_text="15")
+fig_vix.add_hline(y=20, line_dash="dash", line_color="#E74C3C", annotation_text="20")
+fig_vix.update_layout(
+    height=360,
+    margin=dict(l=10, r=10, t=30, b=10),
+    hovermode="x unified",
+    xaxis=dict(
+        rangeslider=dict(visible=show_ranges),
+        rangebreaks=[dict(bounds=["sat", "mon"])]
+    ),
+    yaxis_title="Indice",
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+)
+st.plotly_chart(fig_vix, use_container_width=True)
 
 # ─────────────────────────────────────────────────────────
 # STRATEGIE
