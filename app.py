@@ -1,82 +1,236 @@
 # app.py
-import streamlit as st
-import yfinance as yf
-import pandas as pd
-import plotly.graph_objects as go
+import os
 from datetime import datetime
+import numpy as np
+import pandas as pd
+import yfinance as yf
+import plotly.graph_objects as go
+import streamlit as st
 
+# ——————————————————————————————————————————————————————————
+# CONFIG
+# ——————————————————————————————————————————————————————————
 st.set_page_config(
-    page_title="Kriterion Quant - Dashboard Strategie SPX/VIX",
+    page_title="Kriterion Quant — Dashboard SPX/VIX",
     page_icon="📈",
     layout="wide"
 )
 
-st.title("📈 Dashboard di Analisi SPX e VIX")
-st.caption(f"Dati aggiornati al: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+# Piccolo tema CSS per card & badge
+st.markdown("""
+<style>
+/* metric cards */
+.block-container {padding-top: 1rem; padding-bottom: 2rem;}
+.kq-badge {display:inline-block; padding:.15rem .5rem; border-radius:999px; font-size:.8rem; font-weight:600;}
+.kq-on {background:#DCFCE7; color:#14532D;}   /* green */
+.kq-neutral {background:#FEF9C3; color:#713F12;} /* amber */
+.kq-off {background:#FFE4E6; color:#881337;}  /* rose */
 
-@st.cache_data(ttl=600)
-def load_data(ticker, period='2y'):
-    return yf.download(ticker, period=period, interval='1d', auto_adjust=True)
+/* status chips in table */
+.kq-chip {padding:.15rem .5rem; border-radius:999px; font-weight:600;}
+.kq-chip-on {background:#22c55e26; color:#166534;}
+.kq-chip-off {background:#ef444426; color:#7f1d1d;}
+</style>
+""", unsafe_allow_html=True)
 
-spx_data = load_data('^GSPC')
-vix_data = load_data('^VIX')
+st.title("📈 Dashboard di Analisi SPX/VIX — Kriterion Quant")
 
-if not spx_data.empty and not vix_data.empty:
-    spx_data['SMA90'] = spx_data['Close'].rolling(window=90).mean()
-    spx_data['SMA125'] = spx_data['Close'].rolling(window=125).mean()
-    spx_data['SMA150'] = spx_data['Close'].rolling(window=150).mean()
+# ——————————————————————————————————————————————————————————
+# SIDEBAR
+# ——————————————————————————————————————————————————————————
+with st.sidebar:
+    st.header("⚙️ Controlli")
+    period = st.selectbox(
+        "Periodo storico",
+        options=["6mo", "1y", "2y", "5y", "10y", "max"],
+        index=2
+    )
+    show_ranges = st.checkbox("Mostra range slider e bottoni periodo", value=True)
+    st.divider()
+    st.caption("Dati da Yahoo Finance, auto-adjusted. Cache 10 minuti.")
 
-    # --- SEZIONE MODIFICATA ---
-    # Estrai i valori e convertili esplicitamente in float
-    latest_spx = float(spx_data['Close'].values[-1])
-    latest_vix = float(vix_data['Close'].values[-1])
-    latest_sma90 = float(spx_data['SMA90'].values[-1])
-    latest_sma125 = float(spx_data['SMA125'].values[-1])
-    latest_sma150 = float(spx_data['SMA150'].values[-1])
-    # --- FINE SEZIONE MODIFICATA ---
+# ——————————————————————————————————————————————————————————
+# DATA
+# ——————————————————————————————————————————————————————————
+@st.cache_data(ttl=600, show_spinner=False)
+def load_data(ticker: str, period: str = "2y") -> pd.DataFrame:
+    df = yf.download(ticker, period=period, interval="1d", auto_adjust=True)
+    # Normalizza colonne attese
+    if not df.empty:
+        df = df[["Close"]].rename(columns={"Close": "Close"}).copy()
+    return df
 
-    col1, col2 = st.columns([3, 1])
+spx = load_data("^GSPC", period)
+vix = load_data("^VIX", period)
 
-    with col1:
-        st.subheader("Andamento Indice S&P 500 (SPX) e Medie Mobili")
-        fig_spx = go.Figure()
-        fig_spx.add_trace(go.Scatter(x=spx_data.index, y=spx_data['Close'], mode='lines', name='SPX Close', line=dict(color='blue', width=2)))
-        fig_spx.add_trace(go.Scatter(x=spx_data.index, y=spx_data['SMA90'], mode='lines', name='SMA 90', line=dict(color='orange', dash='dot')))
-        fig_spx.add_trace(go.Scatter(x=spx_data.index, y=spx_data['SMA125'], mode='lines', name='SMA 125', line=dict(color='purple', dash='dot')))
-        fig_spx.add_trace(go.Scatter(x=spx_data.index, y=spx_data['SMA150'], mode='lines', name='SMA 150', line=dict(color='red', dash='dot')))
-        fig_spx.update_layout(title_text='SPX con SMA 90, 125, 150', xaxis_rangeslider_visible=False)
-        st.plotly_chart(fig_spx, use_container_width=True)
-
-        st.subheader("Andamento Indice di Volatilità (VIX) e Soglie Critiche")
-        fig_vix = go.Figure()
-        fig_vix.add_trace(go.Scatter(x=vix_data.index, y=vix_data['Close'], mode='lines', name='VIX Close', line=dict(color='green')))
-        fig_vix.add_hline(y=15, line_dash="dash", line_color="orange", annotation_text="Soglia 15", annotation_position="bottom right")
-        fig_vix.add_hline(y=20, line_dash="dash", line_color="red", annotation_text="Soglia 20", annotation_position="top right")
-        fig_vix.update_layout(title_text='VIX con soglie 15 e 20', xaxis_rangeslider_visible=False)
-        st.plotly_chart(fig_vix, use_container_width=True)
-
-    with col2:
-        st.subheader("Valori di Mercato")
-        st.metric(label="SPX", value=f"{latest_spx:,.2f}")
-        st.metric(label="VIX", value=f"{latest_vix:,.2f}")
-        st.metric(label="SMA 90", value=f"{latest_sma90:,.2f}")
-        st.metric(label="SMA 125", value=f"{latest_sma125:,.2f}")
-        st.metric(label="SMA 150", value=f"{latest_sma150:,.2f}")
-        
-        st.divider()
-
-        st.subheader("Stato Attuale Strategie")
-
-        def display_strategy_status(name, is_active):
-            emoji = "✅" if is_active else "❌"
-            status_text = "ATTIVA" if is_active else "NON ATTIVA"
-            st.markdown(f"**{name}**: {status_text} {emoji}")
-
-        display_strategy_status("M2K SHORT", latest_spx > latest_sma90 and latest_vix < 15)
-        display_strategy_status("MES SHORT", latest_spx > latest_sma125 and latest_vix < 15)
-        display_strategy_status("MNQ SHORT", latest_spx < latest_sma150 and latest_vix > 20)
-        display_strategy_status("DVO LONG", latest_spx > latest_sma125 and latest_vix < 20)
-        display_strategy_status("KeyCandle LONG", latest_spx > latest_sma125 and latest_vix < 20)
-        display_strategy_status("Z-SCORE LONG", latest_spx > latest_sma125 and latest_vix < 20)
-else:
+if spx.empty or vix.empty:
     st.error("Errore nel caricamento dei dati da Yahoo Finance. Riprova più tardi.")
+    st.stop()
+
+# Indicatori
+for w in (90, 125, 150):
+    spx[f"SMA{w}"] = spx["Close"].rolling(window=w).mean()
+
+# Valori latest (cast a float per robustezza)
+latest_spx = float(spx["Close"].iloc[-1])
+prev_spx = float(spx["Close"].iloc[-2]) if len(spx) > 1 else np.nan
+latest_vix = float(vix["Close"].iloc[-1])
+prev_vix = float(vix["Close"].iloc[-2]) if len(vix) > 1 else np.nan
+latest_sma90  = float(spx["SMA90"].iloc[-1])
+latest_sma125 = float(spx["SMA125"].iloc[-1])
+latest_sma150 = float(spx["SMA150"].iloc[-1])
+
+def fmt(x, nd=2):
+    if x is None or np.isnan(x):
+        return "—"
+    return f"{x:,.{nd}f}"
+
+def pct(a, b):
+    if b is None or np.isnan(b) or b == 0:
+        return np.nan
+    return (a/b - 1.0) * 100.0
+
+# Delta % day-over-day
+spx_dod = pct(latest_spx, prev_spx)
+vix_dod = pct(latest_vix, prev_vix)
+
+# Distance to SMAs
+d_spx_sma90  = pct(latest_spx, latest_sma90)
+d_spx_sma125 = pct(latest_spx, latest_sma125)
+d_spx_sma150 = pct(latest_spx, latest_sma150)
+
+# Regime sintetico
+# Risk-ON: SPX > SMA125 e VIX < 20
+# Risk-OFF: SPX < SMA150 o VIX > 20
+# altrimenti Neutral
+if (latest_spx > latest_sma125) and (latest_vix < 20):
+    regime_label = '<span class="kq-badge kq-on">RISK-ON</span>'
+elif (latest_spx < latest_sma150) or (latest_vix > 20):
+    regime_label = '<span class="kq-badge kq-off">RISK-OFF</span>'
+else:
+    regime_label = '<span class="kq-badge kq-neutral">NEUTRAL</span>'
+
+st.caption(f"Aggiornato al: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+st.markdown(f"**Regime corrente:** {regime_label}", unsafe_allow_html=True)
+
+# ——————————————————————————————————————————————————————————
+# KPI
+# ——————————————————————————————————————————————————————————
+k1, k2, k3, k4, k5 = st.columns(5)
+with k1:
+    st.metric("SPX", fmt(latest_spx), delta=(f"{spx_dod:+.2f}%" if not np.isnan(spx_dod) else None))
+with k2:
+    st.metric("VIX", fmt(latest_vix), delta=(f"{vix_dod:+.2f}%" if not np.isnan(vix_dod) else None))
+with k3:
+    st.metric("SPX vs SMA125", f"{d_spx_sma125:.2f}%" if not np.isnan(d_spx_sma125) else "—")
+with k4:
+    st.metric("SPX vs SMA90",  f"{d_spx_sma90:.2f}%" if not np.isnan(d_spx_sma90) else "—")
+with k5:
+    st.metric("SPX vs SMA150", f"{d_spx_sma150:.2f}%" if not np.isnan(d_spx_sma150) else "—")
+
+st.divider()
+
+# ——————————————————————————————————————————————————————————
+# CHARTS
+# ——————————————————————————————————————————————————————————
+c1, c2 = st.columns([3, 2], gap="large")
+
+with c1:
+    st.subheader("SPX con SMA (90/125/150)")
+    fig_spx = go.Figure()
+    fig_spx.add_trace(go.Scatter(x=spx.index, y=spx["Close"], name="SPX Close", mode="lines", line=dict(width=2)))
+    fig_spx.add_trace(go.Scatter(x=spx.index, y=spx["SMA90"], name="SMA 90", mode="lines", line=dict(dash="dot")))
+    fig_spx.add_trace(go.Scatter(x=spx.index, y=spx["SMA125"], name="SMA 125", mode="lines", line=dict(dash="dot")))
+    fig_spx.add_trace(go.Scatter(x=spx.index, y=spx["SMA150"], name="SMA 150", mode="lines", line=dict(dash="dot")))
+    fig_spx.update_layout(
+        height=420,
+        margin=dict(l=10, r=10, t=30, b=10),
+        xaxis=dict(rangeslider=dict(visible=show_ranges), rangebreaks=[dict(bounds=["sat", "mon"])]),
+        yaxis_title="Prezzo",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0)
+    )
+    if show_ranges:
+        fig_spx.update_xaxes(
+            rangeselector=dict(
+                buttons=list([
+                    dict(count=1, label="1m", step="month", stepmode="backward"),
+                    dict(count=3, label="3m", step="month", stepmode="backward"),
+                    dict(count=6, label="6m", step="month", stepmode="backward"),
+                    dict(count=1, label="YTD", step="year", stepmode="todate"),
+                    dict(count=1, label="1y", step="year", stepmode="backward"),
+                    dict(step="all")
+                ])
+            )
+        )
+    st.plotly_chart(fig_spx, use_container_width=True)
+
+with c2:
+    st.subheader("VIX con soglie 15/20")
+    fig_vix = go.Figure()
+    fig_vix.add_trace(go.Scatter(x=vix.index, y=vix["Close"], name="VIX Close", mode="lines"))
+    # zone 15-20
+    fig_vix.add_hrect(y0=15, y1=20, line_width=0, fillcolor="orange", opacity=0.08)
+    fig_vix.add_hline(y=15, line_dash="dash", annotation_text="15")
+    fig_vix.add_hline(y=20, line_dash="dash", annotation_text="20")
+    fig_vix.update_layout(
+        height=420,
+        margin=dict(l=10, r=10, t=30, b=10),
+        xaxis=dict(rangeslider=dict(visible=show_ranges), rangebreaks=[dict(bounds=["sat", "mon"])]),
+        yaxis_title="Indice",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0)
+    )
+    st.plotly_chart(fig_vix, use_container_width=True)
+
+# ——————————————————————————————————————————————————————————
+# STRATEGIE: stato + motivazione sintetica
+# ——————————————————————————————————————————————————————————
+def strategy_rows(spx_price, vix_price, sma90, sma125, sma150):
+    rules = {
+        "M2K SHORT":  ("SPX>SMA90 & VIX<15",  (spx_price > sma90)  and (vix_price < 15)),
+        "MES SHORT":  ("SPX>SMA125 & VIX<15", (spx_price > sma125) and (vix_price < 15)),
+        "MNQ SHORT":  ("SPX<SMA150 & VIX>20", (spx_price < sma150) and (vix_price > 20)),
+        "DVO LONG":   ("SPX>SMA125 & VIX<20", (spx_price > sma125) and (vix_price < 20)),
+        "KeyCandle LONG": ("SPX>SMA125 & VIX<20", (spx_price > sma125) and (vix_price < 20)),
+        "Z-SCORE LONG":   ("SPX>SMA125 & VIX<20", (spx_price > sma125) and (vix_price < 20)),
+    }
+    rows = []
+    for name, (cond, active) in rules.items():
+        # margini (distanze utili al controllo condizione)
+        margins = []
+        if "SMA90" in cond:
+            margins.append(f"Δ(SPX/SMA90) {pct(spx_price, sma90):+.2f}%")
+        if "SMA125" in cond:
+            margins.append(f"Δ(SPX/SMA125) {pct(spx_price, sma125):+.2f}%")
+        if "SMA150" in cond:
+            margins.append(f"Δ(SPX/SMA150) {pct(spx_price, sma150):+.2f}%")
+        if "VIX<15" in cond:
+            margins.append(f"VIX {vix_price:.2f} (<15)")
+        if "VIX<20" in cond:
+            margins.append(f"VIX {vix_price:.2f} (<20)")
+        if "VIX>20" in cond:
+            margins.append(f"VIX {vix_price:.2f} (>20)")
+        rows.append({
+            "Strategia": name,
+            "Regola": cond,
+            "Stato": "🟢 ATTIVA" if active else "🔴 NON ATTIVA",
+            "Margini": " | ".join(margins)
+        })
+    return pd.DataFrame(rows)
+
+st.subheader("📊 Stato Attuale Strategie")
+df_strat = strategy_rows(latest_spx, latest_vix, latest_sma90, latest_sma125, latest_sma150)
+
+# Piccola formattazione: colonne strette dove serve
+st.dataframe(
+    df_strat,
+    use_container_width=True,
+    hide_index=True,
+    column_config={
+        "Strategia": st.column_config.TextColumn(width="small"),
+        "Regola": st.column_config.TextColumn(width="medium"),
+        "Stato": st.column_config.TextColumn(width="small"),
+        "Margini": st.column_config.TextColumn(width="large"),
+    }
+)
+
+st.caption("Nota: logiche dei segnali semplificate per il monitoraggio; l’esecuzione reale segue i sistemi proprietari.")
