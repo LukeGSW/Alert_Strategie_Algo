@@ -1,22 +1,22 @@
 # .github/workflows/daily_alert.yml
+
 name: Daily Strategy Alert
 
 on:
   schedule:
-    # Esegui alle 10:00 UTC, che corrisponde alle 13:00 di Sofia (EEST, UTC+3) in estate.
-    # NOTA: Durante l'inverno (EET, UTC+2) corrisponderà alle 12:00 di Sofia.
+    # Esegui alle 10:00 UTC (13:00 Sofia in estate, 12:00 in inverno)
     - cron: '0 10 * * *'
-  workflow_dispatch: # Permette l'avvio manuale del workflow dalla UI di GitHub
+  workflow_dispatch: # Permette l'avvio manuale del workflow
 
 jobs:
   run-alert-script:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # Usa la versione più recente
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5 # Usa la versione più recente
         with:
           python-version: '3.9'
 
@@ -26,7 +26,9 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run the daily check and send alert
+        # Questa è la sezione cruciale.
+        # Assicura che i secret di GitHub vengano passati come variabili d'ambiente allo script.
         env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python run_daily_check.py
