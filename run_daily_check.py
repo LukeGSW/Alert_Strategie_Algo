@@ -30,8 +30,6 @@ def send_telegram_message(message):
 def check_strategies_and_alert():
     print("Avvio del controllo giornaliero delle strategie...")
 
-    # --- SEZIONE MODIFICATA ---
-    # Scarica i dati specificando auto_adjust=True per rimuovere i warning
     spx_data = yf.download(SPX_TICKER, period='200d', interval='1d', auto_adjust=True)
     vix_data = yf.download(VIX_TICKER, period='10d', interval='1d', auto_adjust=True)
 
@@ -39,17 +37,16 @@ def check_strategies_and_alert():
         send_telegram_message("⚠️ *Errore Dati*: Impossibile scaricare i dati per SPX o VIX.")
         return
 
-    # Estrai i valori più recenti come scalari usando .values[-1]
-    spx_price = spx_data['Close'].values[-1]
-    vix_price = vix_data['Close'].values[-1]
+    # --- SEZIONE MODIFICATA ---
+    # Estrai i valori e convertili esplicitamente in float
+    spx_price = float(spx_data['Close'].values[-1])
+    vix_price = float(vix_data['Close'].values[-1])
 
-    # Calcola le SMA e estrai i valori come scalari
-    sma90 = spx_data['Close'].rolling(window=90).mean().values[-1]
-    sma125 = spx_data['Close'].rolling(window=125).mean().values[-1]
-    sma150 = spx_data['Close'].rolling(window=150).mean().values[-1]
+    sma90 = float(spx_data['Close'].rolling(window=90).mean().values[-1])
+    sma125 = float(spx_data['Close'].rolling(window=125).mean().values[-1])
+    sma150 = float(spx_data['Close'].rolling(window=150).mean().values[-1])
     # --- FINE SEZIONE MODIFICATA ---
 
-    # Valutazione strategie (ora funziona correttamente)
     strategies = {
         "M2K SHORT": (spx_price > sma90 and vix_price < 15),
         "MES SHORT": (spx_price > sma125 and vix_price < 15),
@@ -59,10 +56,10 @@ def check_strategies_and_alert():
         "Z-SCORE LONG": (spx_price > sma125 and vix_price < 20)
     }
 
-    # Composizione del messaggio (invariata)
     sofia_tz = pytz.timezone('Europe/Sofia')
     now_sofia = datetime.now(sofia_tz).strftime('%Y-%m-%d %H:%M:%S')
 
+    # La formattazione ora funzionerà correttamente
     message = f"🔔 *Report Strategie Kriterion Quant*\n"
     message += f"_{now_sofia} (Ora di Sofia)_\n\n"
     message += f"*Valori Attuali:*\n"
