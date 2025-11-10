@@ -243,9 +243,11 @@ def strategy_rows(spx_price, vix_price, sma90, sma125, sma150) -> pd.DataFrame:
         "M2K SHORT":      ("SPX>SMA90 & VIX<15",  (spx_price > sma90)  and (vix_price < 15)),
         "MES SHORT":      ("SPX>SMA125 & VIX<15", (spx_price > sma125) and (vix_price < 15)),
         "MNQ SHORT":      ("SPX<SMA150 & VIX>20", (spx_price < sma150) and (vix_price > 20)),
-        "DVO LONG":       ("SPX>SMA125 & VIX<20", (spx_price > sma125) and (vix_price < 20)),
-        "KeyCandle LONG": ("SPX>SMA125 & VIX<20", (spx_price > sma125) and (vix_price < 20)),
-        "Z-SCORE LONG":   ("SPX>SMA125 & VIX<20", (spx_price > sma125) and (vix_price < 20)),
+        #"DVO LONG":       ("SPX>SMA125 & VIX<20", (spx_price > sma125) and (vix_price < 20)),
+        #"KeyCandle LONG": ("SPX>SMA125 & VIX<20", (spx_price > sma125) and (vix_price < 20)),
+        #"Z-SCORE LONG":   ("SPX>SMA125 & VIX<20", (spx_price > sma125) and (vix_price < 20)),
+        "MotoreBreakOut LONG": ("SPX>SMA125 & VIX<15", (spx_price > sma125) and (vix_price < 15)),
+        "ZScoreCorr LONG":     ("SPX>SMA125 & VIX<20", (spx_price > sma125) and (vix_price < 20)),
     }
     def _pct(a, b):
         return np.nan if b is None or (isinstance(b, float) and (np.isnan(b) or b == 0.0)) else (a/b - 1.0) * 100.0
