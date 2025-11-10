@@ -212,7 +212,8 @@ with tab1:
                 ]
             )
         )
-    st.plotly_chart(fig_spx, use_container_width=True)
+    # FIX 1: use_container_width=True -> width='stretch'
+    st.plotly_chart(fig_spx, width='stretch') 
 
     st.divider()
 
@@ -236,7 +237,8 @@ with tab1:
         yaxis_title="Indice",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     )
-    st.plotly_chart(fig_vix, use_container_width=True)
+    # FIX 2: use_container_width=True -> width='stretch'
+    st.plotly_chart(fig_vix, width='stretch')
 
 
 # === TAB 2: STATO ATTUALE (TABELLA ESISTENTE) ===
@@ -271,9 +273,10 @@ with tab2:
 
     st.subheader("📊 Stato Attuale Strategie")
     df_strat = strategy_rows(latest_spx, latest_vix, latest_sma90, latest_sma125, latest_sma150)
+    # FIX 3: use_container_width=True -> width='stretch'
     st.dataframe(
         df_strat,
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         column_config={
             "Strategia": st.column_config.TextColumn(width="small"),
@@ -292,7 +295,9 @@ with tab3:
 
     # 1. Unisci dati storici SPX (con SMA) e VIX
     vix_close_series = vix["Close"].rename("VIX_Close")
-    df_storico = spx.join(vix_close_series, how='left').fillna(method='ffill').dropna()
+    
+    # FIX 4 (PANDAS): .fillna(method='ffill') -> .ffill()
+    df_storico = spx.join(vix_close_series, how='left').ffill().dropna()
 
     # 2. Calcola le regole storiche e converti True/False in 1/0
     df_storico["STATUS_M2K"] = ((df_storico["Close"] > df_storico["SMA90"]) & (df_storico["VIX_Close"] < 15)).astype(int)
@@ -391,7 +396,8 @@ with tab3:
         annotation['yanchor'] = 'bottom'
         annotation['y'] = annotation['y'] + 0.01 # Sposta leggermente in alto
 
-    st.plotly_chart(fig_storico, use_container_width=True)
+    # FIX 5: use_container_width=True -> width='stretch'
+    st.plotly_chart(fig_storico, width='stretch')
 
 
 # ─────────────────────────────────────────────────────────
