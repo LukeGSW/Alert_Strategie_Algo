@@ -2,7 +2,7 @@ name: Daily Strategy Alert
 
 on:
   schedule:
-    - cron: '0 10 * * *'   # 10:00 UTC
+    - cron: '15 22 * * *'   # 22:15 UTC = 17:15 EST (NY)
   workflow_dispatch:
 
 jobs:
