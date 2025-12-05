@@ -212,7 +212,6 @@ with tab1:
                 ]
             )
         )
-    # FIX 1: use_container_width=True -> width='stretch'
     st.plotly_chart(fig_spx, width='stretch') 
 
     st.divider()
@@ -237,32 +236,41 @@ with tab1:
         yaxis_title="Indice",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     )
-    # FIX 2: use_container_width=True -> width='stretch'
     st.plotly_chart(fig_vix, width='stretch')
 
 
-# === TAB 2: STATO ATTUALE (TABELLA ESISTENTE) ===
+# === TAB 2: STATO ATTUALE (TABELLA AGGIORNATA) ===
 with tab2:
     def strategy_rows(spx_price, vix_price, sma90, sma125, sma150) -> pd.DataFrame:
+        # Condizioni ausiliarie per ZScore
+        # Active se Combined Weight > 1 (SPX Neutral/Bear AND VIX Mid/High)
+        # SPX Neutral/Bear = SPX <= SMA125 + 2%
+        # VIX Mid/High = VIX >= 15
+        zscore_spx_ok = spx_price <= (sma125 * 1.02) 
+        zscore_vix_ok = vix_price >= 15              
+        zscore_active = zscore_spx_ok and zscore_vix_ok
+
         rules = {
             "M2K SHORT":           ("SPX>SMA90 & VIX<15",  (spx_price > sma90)  and (vix_price < 15)),
             "MES SHORT":           ("SPX>SMA125 & VIX<15", (spx_price > sma125) and (vix_price < 15)),
             "MNQ SHORT":           ("SPX<SMA150 & VIX>20", (spx_price < sma150) and (vix_price > 20)),
             "MotoreBreakOut LONG": ("SPX>SMA125 & VIX<15", (spx_price > sma125) and (vix_price < 15)),
             "ZScoreCorr LONG":     ("SPX>SMA125 & VIX<20", (spx_price > sma125) and (vix_price < 20)),
-            # Le strategie disabilitate (DVO, KeyCandle, Z-SCORE) sono coperte dalla logica "ZScoreCorr LONG"
+            "MES ZScore":          ("SPX<=125MA+2% & VIX>=15", zscore_active),
         }
+        
         def _pct(a, b):
             return np.nan if b is None or (isinstance(b, float) and (np.isnan(b) or b == 0.0)) else (a/b - 1.0) * 100.0
+            
         rows = []
         for name, (cond, active) in rules.items():
             margins = []
-            if "SMA90"  in cond: margins.append(f"Δ(SPX/SMA90)  {_pct(spx_price, sma90):+.2f}%")
-            if "SMA125" in cond: margins.append(f"Δ(SPX/SMA125) {_pct(spx_price, sma125):+.2f}%")
-            if "SMA150" in cond: margins.append(f"Δ(SPX/SMA150) {_pct(spx_price, sma150):+.2f}%")
-            if "VIX<15"  in cond: margins.append(f"VIX {vix_price:.2f} (<15)")
-            if "VIX<20"  in cond: margins.append(f"VIX {vix_price:.2f} (<20)")
-            if "VIX>20"  in cond: margins.append(f"VIX {vix_price:.2f} (>20)")
+            if "SMA90"  in cond: margins.append(f"ΔSPX90 {_pct(spx_price, sma90):+.2f}%")
+            if "SMA125" in cond or "125MA" in cond: margins.append(f"ΔSPX125 {_pct(spx_price, sma125):+.2f}%")
+            if "SMA150" in cond: margins.append(f"ΔSPX150 {_pct(spx_price, sma150):+.2f}%")
+            if "VIX" in cond:
+                margins.append(f"VIX {vix_price:.2f}")
+
             rows.append({
                 "Strategia": name,
                 "Regola": cond,
@@ -273,7 +281,6 @@ with tab2:
 
     st.subheader("📊 Stato Attuale Strategie")
     df_strat = strategy_rows(latest_spx, latest_vix, latest_sma90, latest_sma125, latest_sma150)
-    # FIX 3: use_container_width=True -> width='stretch'
     st.dataframe(
         df_strat,
         width='stretch',
@@ -288,7 +295,7 @@ with tab2:
     st.caption("Nota: logiche dei segnali semplificate per il monitoraggio; l’esecuzione reale segue i sistemi proprietari.")
 
 
-# === TAB 3: ANALISI STORICA (NUOVA FUNZIONALITÀ) ===
+# === TAB 3: ANALISI STORICA (AGGIORNATA) ===
 with tab3:
     st.subheader("Analisi Storica Regimi vs SPX")
     st.caption("Grafico SPX (in alto) con lo stato storico (Attivo=1 / Non Attivo=0) delle strategie nei subchart sottostanti. I grafici sono sincronizzati: zoomando o spostando l'asse temporale, tutti i grafici si adatteranno.")
@@ -296,7 +303,7 @@ with tab3:
     # 1. Unisci dati storici SPX (con SMA) e VIX
     vix_close_series = vix["Close"].rename("VIX_Close")
     
-    # FIX 4 (PANDAS): .fillna(method='ffill') -> .ffill()
+    # ffill per coprire i buchi
     df_storico = spx.join(vix_close_series, how='left').ffill().dropna()
 
     # 2. Calcola le regole storiche e converti True/False in 1/0
@@ -306,20 +313,27 @@ with tab3:
     df_storico["STATUS_MOTORE"] = ((df_storico["Close"] > df_storico["SMA125"]) & (df_storico["VIX_Close"] < 15)).astype(int)
     df_storico["STATUS_ZSCORE"] = ((df_storico["Close"] > df_storico["SMA125"]) & (df_storico["VIX_Close"] < 20)).astype(int)
 
-    # 3. Crea la griglia di subplot (6 righe, 1 colonna)
+    # NUOVA REGOLA STORICA MES ZScore (SMA125)
+    # Active se SPX <= SMA125*1.02 (Neutral/Bear) AND VIX >= 15 (Mid/High)
+    cond_spx_zscore = df_storico["Close"] <= (df_storico["SMA125"] * 1.02)
+    cond_vix_zscore = df_storico["VIX_Close"] >= 15
+    df_storico["STATUS_MES_ZSCORE"] = (cond_spx_zscore & cond_vix_zscore).astype(int)
+
+    # 3. Crea la griglia di subplot (7 righe, 1 colonna)
     fig_storico = make_subplots(
-        rows=6, 
+        rows=7, 
         cols=1,
-        shared_xaxes=True, # <-- Asse X condiviso e sincronizzato
-        vertical_spacing=0.03,
-        row_heights=[0.5, 0.1, 0.1, 0.1, 0.1, 0.1], # Più spazio per SPX
+        shared_xaxes=True,
+        vertical_spacing=0.02,
+        row_heights=[0.4, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
         subplot_titles=(
             "SPX Close", 
             "M2K SHORT (SPX>90 & VIX<15)", 
             "MES SHORT (SPX>125 & VIX<15)", 
             "MNQ SHORT (SPX<150 & VIX>20)", 
             "MotoreBreakOut LONG (SPX>125 & VIX<15)", 
-            "ZScoreCorr LONG (SPX>125 & VIX<20)"
+            "ZScoreCorr LONG (SPX>125 & VIX<20)",
+            "MES ZScore (SPX<=125MA+2% & VIX>=15)" # <--- NUOVO TITOLO
         )
     )
 
@@ -332,8 +346,7 @@ with tab3:
         line=dict(color="#2E86C1", width=2)
     ), row=1, col=1)
 
-    # 5. Aggiungi tracce Strategie (Righe 2-6)
-    # Usiamo fill='tozeroy' per creare i "blocchi" 0 o 1
+    # 5. Aggiungi tracce Strategie (Righe 2-7)
     
     # M2K SHORT (Rosso)
     fig_storico.add_trace(go.Scatter(
@@ -365,23 +378,29 @@ with tab3:
         fill='tozeroy', mode='lines', line=dict(color="#2980B9", width=1)
     ), row=6, col=1)
 
+    # MES ZScore (Magenta/Viola scuro) - RIGA 7
+    fig_storico.add_trace(go.Scatter(
+        x=df_storico.index, y=df_storico["STATUS_MES_ZSCORE"], name="MES ZScore",
+        fill='tozeroy', mode='lines', line=dict(color="#884EA0", width=1)
+    ), row=7, col=1)
+
     # 6. Configura Layout
     fig_storico.update_layout(
-        height=900,
-        hovermode="x unified", # Tooltip unificato su tutti i grafici
+        height=1000, # Aumentata l'altezza
+        hovermode="x unified",
         showlegend=False,
         margin=dict(l=10, r=10, t=40, b=10),
         xaxis=dict(rangeslider=dict(visible=False)),
-        xaxis6=dict(rangeslider=dict(visible=True, thickness=0.08)) # Range slider solo sull'ultimo grafico
+        xaxis7=dict(rangeslider=dict(visible=True, thickness=0.08)) # Range slider sull'ultimo grafico
     )
 
-    # Nascondi etichette assi X per i grafici 1-5 (rimangono solo sull'ultimo)
-    for i in range(1, 6):
+    # Nascondi etichette assi X per i grafici 1-6
+    for i in range(1, 7):
         fig_storico.update_xaxes(showticklabels=False, row=i, col=1)
     
-    # Configura assi Y: nascondi etichette e imposta range [0, 1.1] per i subchart
+    # Configura assi Y
     fig_storico.update_yaxes(title_text="Prezzo SPX", row=1, col=1)
-    for i in range(2, 7):
+    for i in range(2, 8):
         fig_storico.update_yaxes(
             title_text="Stato",
             range=[-0.1, 1.1], 
@@ -392,11 +411,10 @@ with tab3:
         
     # Migliora la leggibilità dei titoli dei subplot
     for annotation in fig_storico['layout']['annotations']:
-        annotation['font'] = dict(size=12) # Rendi i titoli dei subplot più piccoli
+        annotation['font'] = dict(size=12)
         annotation['yanchor'] = 'bottom'
-        annotation['y'] = annotation['y'] + 0.01 # Sposta leggermente in alto
+        annotation['y'] = annotation['y'] + 0.01
 
-    # FIX 5: use_container_width=True -> width='stretch'
     st.plotly_chart(fig_storico, width='stretch')
 
 
