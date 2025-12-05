@@ -159,6 +159,12 @@ def check_strategies_and_alert() -> None:
     # SPX: BULL (1.24) o NEUTRAL (1.50) -> OK (NON BEAR). Bear < 125MA-2%. -> SPX >= SMA125*0.98
     # VIX: LOW (1.50) o MID (1.30) -> OK (NON HIGH). High > 20. -> VIX < 20
     mgc_zscore_active = (spx_price >= (sma125 * 0.98)) and (vix_price < 20)
+    
+    # 3. Logic MNQ TrendFollowing (SMA125 + 2%)
+    # Active se Weight > 1.
+    # SPX: BULL (1.50) -> OK. (Neutral/Bear = 0.50 -> NO). -> SPX > SMA125*1.02
+    # VIX: MID (1.50) or HIGH (0.90 -> 1.5*0.9=1.35 > 1) -> OK. LOW (0.50) -> NO. -> VIX >= 15
+    mnq_trend_active = (spx_price > (sma125 * 1.02)) and (vix_price >= 15)
 
     # Stato strategie
     strategies = [
@@ -168,7 +174,8 @@ def check_strategies_and_alert() -> None:
         ("MotoreBreakOut LONG", "SPX>SMA125 & VIX<15", (spx_price > sma125) and (vix_price < 15)),
         ("ZScoreCorr LONG",     "SPX>SMA125 & VIX<20", (spx_price > sma125) and (vix_price < 20)),
         ("MES ZScore", "SPX<=125MA+2% & VIX>=15", mes_zscore_active),
-        ("MGC ZScore", "SPX>=125MA-2% & VIX<20", mgc_zscore_active), # <--- NUOVA
+        ("MGC ZScore", "SPX>=125MA-2% & VIX<20", mgc_zscore_active),
+        ("MNQ TrendFoll", "SPX>125MA+2% & VIX>=15", mnq_trend_active), # <--- NUOVA
     ]
 
     # Regime sintetico
