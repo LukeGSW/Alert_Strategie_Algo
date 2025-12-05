@@ -148,14 +148,17 @@ def check_strategies_and_alert() -> None:
     sma125 = float(spx_close.rolling(125, min_periods=1).mean().iat[-1])
     sma150 = float(spx_close.rolling(150, min_periods=1).mean().iat[-1])
 
-    # Logica MES ZScore (SMA125 + 2%)
-    # Active se Combined Weight > 1. 
-    # Weight è > 1 solo se entrambi i componenti sono "favorevoli" (peso 1.5):
-    # 1. SPX: NEUTRAL o BEAR (ovvero NON BULL). Bull è > SMA125 + 2%. 
-    #    Quindi Condition SPX OK se: SPX <= SMA125 * 1.02
-    # 2. VIX: MID o HIGH (ovvero NON LOW). Low è < 15.
-    #    Quindi Condition VIX OK se: VIX >= 15
+    # 1. Logic MES ZScore (SMA125 + 2%)
+    # Active se Weight > 1. 
+    # SPX: NEUTRAL o BEAR (NON BULL). Bull > 125MA+2%. -> SPX <= SMA125*1.02
+    # VIX: MID o HIGH (NON LOW). Low < 15. -> VIX >= 15
     mes_zscore_active = (spx_price <= (sma125 * 1.02)) and (vix_price >= 15)
+
+    # 2. Logic MGC ZScore (SMA125 +/- 2%)
+    # Active se Weight > 1.
+    # SPX: BULL (1.24) o NEUTRAL (1.50) -> OK (NON BEAR). Bear < 125MA-2%. -> SPX >= SMA125*0.98
+    # VIX: LOW (1.50) o MID (1.30) -> OK (NON HIGH). High > 20. -> VIX < 20
+    mgc_zscore_active = (spx_price >= (sma125 * 0.98)) and (vix_price < 20)
 
     # Stato strategie
     strategies = [
@@ -165,6 +168,7 @@ def check_strategies_and_alert() -> None:
         ("MotoreBreakOut LONG", "SPX>SMA125 & VIX<15", (spx_price > sma125) and (vix_price < 15)),
         ("ZScoreCorr LONG",     "SPX>SMA125 & VIX<20", (spx_price > sma125) and (vix_price < 20)),
         ("MES ZScore", "SPX<=125MA+2% & VIX>=15", mes_zscore_active),
+        ("MGC ZScore", "SPX>=125MA-2% & VIX<20", mgc_zscore_active), # <--- NUOVA
     ]
 
     # Regime sintetico
