@@ -254,6 +254,14 @@ with tab2:
         mgc_vix_ok = vix_price < 20               # NON High
         mgc_active = mgc_spx_ok and mgc_vix_ok
 
+        # Condizioni ausiliarie per MNQ TrendFollowing
+        # Active se Combined Weight > 1 (SPX Bull AND VIX Mid/High)
+        # SPX Bull = SPX > SMA125*1.02
+        # VIX Mid/High = VIX >= 15
+        mnq_spx_ok = spx_price > (sma125 * 1.02)
+        mnq_vix_ok = vix_price >= 15
+        mnq_active = mnq_spx_ok and mnq_vix_ok
+
         rules = {
             "M2K SHORT":           ("SPX>SMA90 & VIX<15",  (spx_price > sma90)  and (vix_price < 15)),
             "MES SHORT":           ("SPX>SMA125 & VIX<15", (spx_price > sma125) and (vix_price < 15)),
@@ -261,7 +269,8 @@ with tab2:
             "MotoreBreakOut LONG": ("SPX>SMA125 & VIX<15", (spx_price > sma125) and (vix_price < 15)),
             "ZScoreCorr LONG":     ("SPX>SMA125 & VIX<20", (spx_price > sma125) and (vix_price < 20)),
             "MES ZScore":          ("SPX<=125MA+2% & VIX>=15", mes_active),
-            "MGC ZScore":          ("SPX>=125MA-2% & VIX<20", mgc_active), # <--- NUOVA
+            "MGC ZScore":          ("SPX>=125MA-2% & VIX<20", mgc_active),
+            "MNQ TrendFoll":       ("SPX>125MA+2% & VIX>=15", mnq_active), # <--- NUOVA
         }
         
         def _pct(a, b):
@@ -329,13 +338,19 @@ with tab3:
     cond_mgc_vix = df_storico["VIX_Close"] < 20
     df_storico["STATUS_MGC_ZSCORE"] = (cond_mgc_spx & cond_mgc_vix).astype(int)
 
-    # 3. Crea la griglia di subplot (8 righe)
+    # MNQ TrendFollowing (SMA125 + 2%)
+    # Active se BULL (SPX > SMA125*1.02) AND NON LOW (VIX >= 15)
+    cond_mnq_spx = df_storico["Close"] > (df_storico["SMA125"] * 1.02)
+    cond_mnq_vix = df_storico["VIX_Close"] >= 15
+    df_storico["STATUS_MNQ_TREND"] = (cond_mnq_spx & cond_mnq_vix).astype(int)
+
+    # 3. Crea la griglia di subplot (9 righe)
     fig_storico = make_subplots(
-        rows=8, # <--- 8 RIGHE
+        rows=9, # <--- 9 RIGHE
         cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.015, # Ridotto ancora un po'
-        row_heights=[0.3, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+        vertical_spacing=0.015,
+        row_heights=[0.28, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09], # Adattato
         subplot_titles=(
             "SPX Close", 
             "M2K SHORT (SPX>90 & VIX<15)", 
@@ -344,7 +359,8 @@ with tab3:
             "MotoreBreakOut LONG (SPX>125 & VIX<15)", 
             "ZScoreCorr LONG (SPX>125 & VIX<20)",
             "MES ZScore (SPX<=125MA+2% & VIX>=15)",
-            "MGC ZScore (SPX>=125MA-2% & VIX<20)" # <--- NUOVO TITOLO
+            "MGC ZScore (SPX>=125MA-2% & VIX<20)",
+            "MNQ TrendFoll (SPX>125MA+2% & VIX>=15)" # <--- NUOVO TITOLO
         )
     )
 
@@ -357,7 +373,7 @@ with tab3:
         line=dict(color="#2E86C1", width=2)
     ), row=1, col=1)
 
-    # 5. Aggiungi tracce Strategie (Righe 2-8)
+    # 5. Aggiungi tracce Strategie (Righe 2-9)
     
     # M2K SHORT (Rosso)
     fig_storico.add_trace(go.Scatter(
@@ -395,29 +411,35 @@ with tab3:
         fill='tozeroy', mode='lines', line=dict(color="#884EA0", width=1)
     ), row=7, col=1)
 
-    # MGC ZScore (Lime Green / Chartreuse) - RIGA 8
+    # MGC ZScore (Lime Green) - RIGA 8
     fig_storico.add_trace(go.Scatter(
         x=df_storico.index, y=df_storico["STATUS_MGC_ZSCORE"], name="MGC ZScore",
-        fill='tozeroy', mode='lines', line=dict(color="#7D3C98", width=1) # O altro colore
+        fill='tozeroy', mode='lines', line=dict(color="#7D3C98", width=1)
     ), row=8, col=1)
+
+    # MNQ TrendFollowing (Azzurro scuro / Teal) - RIGA 9
+    fig_storico.add_trace(go.Scatter(
+        x=df_storico.index, y=df_storico["STATUS_MNQ_TREND"], name="MNQ Trend",
+        fill='tozeroy', mode='lines', line=dict(color="#117864", width=1) 
+    ), row=9, col=1)
 
     # 6. Configura Layout
     fig_storico.update_layout(
-        height=1100, # Aumentata l'altezza
+        height=1200, # Aumentata l'altezza totale
         hovermode="x unified",
         showlegend=False,
         margin=dict(l=10, r=10, t=40, b=10),
         xaxis=dict(rangeslider=dict(visible=False)),
-        xaxis8=dict(rangeslider=dict(visible=True, thickness=0.08)) # Range slider sull'ultimo grafico (8)
+        xaxis9=dict(rangeslider=dict(visible=True, thickness=0.08)) # Range slider sull'ultimo grafico (9)
     )
 
-    # Nascondi etichette assi X per i grafici 1-7
-    for i in range(1, 8):
+    # Nascondi etichette assi X per i grafici 1-8
+    for i in range(1, 9):
         fig_storico.update_xaxes(showticklabels=False, row=i, col=1)
     
     # Configura assi Y
     fig_storico.update_yaxes(title_text="Prezzo SPX", row=1, col=1)
-    for i in range(2, 9):
+    for i in range(2, 10):
         fig_storico.update_yaxes(
             title_text="Stato",
             range=[-0.1, 1.1], 
