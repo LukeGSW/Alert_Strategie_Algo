@@ -129,7 +129,8 @@ def _fmt_num(x: float, nd: int = 2) -> str:
 def check_strategies_and_alert() -> None:
     print("Avvio controllo giornaliero…")
 
-    spx_close = load_close_series(SPX_TICKER, "220d")
+    # Scarichiamo 1y per essere sicuri di avere i dati per la SMA150/125
+    spx_close = load_close_series(SPX_TICKER, "1y")
     vix_close = load_close_series(VIX_TICKER, "30d")
 
     if spx_close.empty or vix_close.empty:
@@ -147,16 +148,23 @@ def check_strategies_and_alert() -> None:
     sma125 = float(spx_close.rolling(125, min_periods=1).mean().iat[-1])
     sma150 = float(spx_close.rolling(150, min_periods=1).mean().iat[-1])
 
+    # Logica MES ZScore (SMA125 + 2%)
+    # Active se Combined Weight > 1. 
+    # Weight è > 1 solo se entrambi i componenti sono "favorevoli" (peso 1.5):
+    # 1. SPX: NEUTRAL o BEAR (ovvero NON BULL). Bull è > SMA125 + 2%. 
+    #    Quindi Condition SPX OK se: SPX <= SMA125 * 1.02
+    # 2. VIX: MID o HIGH (ovvero NON LOW). Low è < 15.
+    #    Quindi Condition VIX OK se: VIX >= 15
+    mes_zscore_active = (spx_price <= (sma125 * 1.02)) and (vix_price >= 15)
+
     # Stato strategie
     strategies = [
         ("M2K SHORT",      "SPX>SMA90 & VIX<15",   (spx_price > sma90)  and (vix_price < 15)),
         ("MES SHORT",      "SPX>SMA125 & VIX<15",  (spx_price > sma125) and (vix_price < 15)),
         ("MNQ SHORT",      "SPX<SMA150 & VIX>20",  (spx_price < sma150) and (vix_price > 20)),
-        #("DVO LONG",       "SPX>SMA125 & VIX<20",  (spx_price > sma125) and (vix_price < 20)),
-        #("KeyCandle LONG", "SPX>SMA125 & VIX<20",  (spx_price > sma125) and (vix_price < 20)),
-        #("Z-SCORE LONG",   "SPX>SMA125 & VIX<20",  (spx_price > sma125) and (vix_price < 20)),
         ("MotoreBreakOut LONG", "SPX>SMA125 & VIX<15", (spx_price > sma125) and (vix_price < 15)),
         ("ZScoreCorr LONG",     "SPX>SMA125 & VIX<20", (spx_price > sma125) and (vix_price < 20)),
+        ("MES ZScore", "SPX<=125MA+2% & VIX>=15", mes_zscore_active),
     ]
 
     # Regime sintetico
@@ -193,13 +201,13 @@ def check_strategies_and_alert() -> None:
         chip = "✅ ATTIVA " if is_on else "❌ NON ATTIVA"
         margins = []
         # NB: qui usiamo simboli "<" ">" ma ESCAPPIAMO l'intero blocco <pre/>
-        if "SMA90"  in rule: margins.append(f"ΔSPX/SMA90  {_pct(spx_price, sma90):+.2f}%")
-        if "SMA125" in rule: margins.append(f"ΔSPX/SMA125 {_pct(spx_price, sma125):+.2f}%")
-        if "SMA150" in rule: margins.append(f"ΔSPX/SMA150 {_pct(spx_price, sma150):+.2f}%")
-        if "VIX<15"  in rule: margins.append(f"VIX {_fmt_num(vix_price)} (<15)")
-        if "VIX<20"  in rule: margins.append(f"VIX {_fmt_num(vix_price)} (<20)")
-        if "VIX>20"  in rule: margins.append(f"VIX {_fmt_num(vix_price)} (>20)")
-        strat_lines.append(f"{name:<14} {chip}  {' | '.join(margins)}")
+        if "SMA90"  in rule: margins.append(f"ΔSPX90 {_pct(spx_price, sma90):+.2f}%")
+        if "SMA125" in rule or "125MA" in rule: margins.append(f"ΔSPX125 {_pct(spx_price, sma125):+.2f}%")
+        if "SMA150" in rule: margins.append(f"ΔSPX150 {_pct(spx_price, sma150):+.2f}%")
+        
+        if "VIX" in rule: margins.append(f"VIX {_fmt_num(vix_price)}")
+
+        strat_lines.append(f"{name:<18} {chip}  {' | '.join(margins)}")
     strategies_block = "<pre>" + html_escape("\n".join(strat_lines)) + "</pre>"
 
     # Messaggio finale
