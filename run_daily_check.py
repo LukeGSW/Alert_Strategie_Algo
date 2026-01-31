@@ -148,34 +148,47 @@ def check_strategies_and_alert() -> None:
     sma125 = float(spx_close.rolling(125, min_periods=1).mean().iat[-1])
     sma150 = float(spx_close.rolling(150, min_periods=1).mean().iat[-1])
 
-    # 1. Logic MES ZScore (SMA125 + 2%)
-    # Active se Weight > 1. 
-    # SPX: NEUTRAL o BEAR (NON BULL). Bull > 125MA+2%. -> SPX <= SMA125*1.02
-    # VIX: MID o HIGH (NON LOW). Low < 15. -> VIX >= 15
-    mes_zscore_active = (spx_price <= (sma125 * 1.02)) and (vix_price >= 15)
-
-    # 2. Logic MGC ZScore (SMA125 +/- 2%)
+    # 1. Logic MGC ZScore (SMA125 +/- 2%)
     # Active se Weight > 1.
     # SPX: BULL (1.24) o NEUTRAL (1.50) -> OK (NON BEAR). Bear < 125MA-2%. -> SPX >= SMA125*0.98
     # VIX: LOW (1.50) o MID (1.30) -> OK (NON HIGH). High > 20. -> VIX < 20
     mgc_zscore_active = (spx_price >= (sma125 * 0.98)) and (vix_price < 20)
     
-    # 3. Logic MNQ TrendFollowing (SMA125 + 2%)
+    # 2. Logic MNQ TrendFollowing (SMA125 + 2%)
     # Active se Weight > 1.
     # SPX: BULL (1.50) -> OK. (Neutral/Bear = 0.50 -> NO). -> SPX > SMA125*1.02
     # VIX: MID (1.50) or HIGH (0.90 -> 1.5*0.9=1.35 > 1) -> OK. LOW (0.50) -> NO. -> VIX >= 15
     mnq_trend_active = (spx_price > (sma125 * 1.02)) and (vix_price >= 15)
+
+    # 3. Logic Bias Intraweek Correlation (SMA125 + 2%)
+    # Active se Weight > 1.
+    # SPX: BULL (1.50) -> OK. -> SPX > SMA125*1.02
+    # VIX: LOW (1.50) o MID (1.50) -> OK. HIGH (0.50) -> NO. -> VIX < 20
+    bias_intraweek_active = (spx_price > (sma125 * 1.02)) and (vix_price < 20)
+
+    # 4. Logic Donchian Correlation (SMA125 + 2%)
+    # Active se Weight > 1.
+    # SPX: BULL (1.50) -> OK. -> SPX > SMA125*1.02
+    # VIX: LOW (1.50) o MID (1.50) -> OK. HIGH (0.50) -> NO. -> VIX < 20
+    donchian_active = (spx_price > (sma125 * 1.02)) and (vix_price < 20)
+
+    # 5. Logic MYM Sushi (SMA125 + 2%)
+    # Active se Weight > 1.
+    # SPX: BULL (1.50) -> OK. -> SPX > SMA125*1.02
+    # VIX: MID (1.50) -> OK. LOW (0.50) o HIGH (0.50) -> NO. -> 15 <= VIX < 20
+    mym_sushi_active = (spx_price > (sma125 * 1.02)) and (vix_price >= 15) and (vix_price < 20)
 
     # Stato strategie
     strategies = [
         ("M2K SHORT",      "SPX>SMA90 & VIX<15",   (spx_price > sma90)  and (vix_price < 15)),
         ("MES SHORT",      "SPX>SMA125 & VIX<15",  (spx_price > sma125) and (vix_price < 15)),
         ("MNQ SHORT",      "SPX<SMA150 & VIX>20",  (spx_price < sma150) and (vix_price > 20)),
-        ("MotoreBreakOut LONG", "SPX>SMA125 & VIX<15", (spx_price > sma125) and (vix_price < 15)),
         ("ZScoreCorr LONG",     "SPX>SMA125 & VIX<20", (spx_price > sma125) and (vix_price < 20)),
-        ("MES ZScore", "SPX<=125MA+2% & VIX>=15", mes_zscore_active),
         ("MGC ZScore", "SPX>=125MA-2% & VIX<20", mgc_zscore_active),
-        ("MNQ TrendFoll", "SPX>125MA+2% & VIX>=15", mnq_trend_active), # <--- NUOVA
+        ("MNQ TrendFoll", "SPX>125MA+2% & VIX>=15", mnq_trend_active),
+        ("Bias Intraweek", "SPX>125MA+2% & VIX<20", bias_intraweek_active),
+        ("Donchian Corr", "SPX>125MA+2% & VIX<20", donchian_active),
+        ("MYM Sushi", "SPX>125MA+2% & 15<=VIX<20", mym_sushi_active),
     ]
 
     # Regime sintetico
