@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots # <-- Import necessario
+from plotly.subplots import make_subplots
 import streamlit as st
 
 # ─────────────────────────────────────────────────────────
@@ -242,12 +242,6 @@ with tab1:
 # === TAB 2: STATO ATTUALE (TABELLA AGGIORNATA) ===
 with tab2:
     def strategy_rows(spx_price, vix_price, sma90, sma125, sma150) -> pd.DataFrame:
-        # Condizioni ausiliarie per MES ZScore
-        # Active se Combined Weight > 1 (SPX Neutral/Bear AND VIX Mid/High)
-        mes_spx_ok = spx_price <= (sma125 * 1.02) 
-        mes_vix_ok = vix_price >= 15              
-        mes_active = mes_spx_ok and mes_vix_ok
-
         # Condizioni ausiliarie per MGC ZScore
         # Active se Combined Weight > 1 (SPX Bull/Neutral AND VIX Low/Mid)
         mgc_spx_ok = spx_price >= (sma125 * 0.98) # NON Bear
@@ -256,21 +250,38 @@ with tab2:
 
         # Condizioni ausiliarie per MNQ TrendFollowing
         # Active se Combined Weight > 1 (SPX Bull AND VIX Mid/High)
-        # SPX Bull = SPX > SMA125*1.02
-        # VIX Mid/High = VIX >= 15
         mnq_spx_ok = spx_price > (sma125 * 1.02)
         mnq_vix_ok = vix_price >= 15
         mnq_active = mnq_spx_ok and mnq_vix_ok
+
+        # Condizioni ausiliarie per Bias Intraweek Correlation
+        # Active se Combined Weight > 1 (SPX Bull AND VIX Low/Mid)
+        bias_spx_ok = spx_price > (sma125 * 1.02)  # BULL
+        bias_vix_ok = vix_price < 20               # LOW o MID
+        bias_active = bias_spx_ok and bias_vix_ok
+
+        # Condizioni ausiliarie per Donchian Correlation
+        # Active se Combined Weight > 1 (SPX Bull AND VIX Low/Mid)
+        donch_spx_ok = spx_price > (sma125 * 1.02)  # BULL
+        donch_vix_ok = vix_price < 20               # LOW o MID
+        donch_active = donch_spx_ok and donch_vix_ok
+
+        # Condizioni ausiliarie per MYM Sushi
+        # Active se Combined Weight > 1 (SPX Bull AND VIX Mid)
+        mym_spx_ok = spx_price > (sma125 * 1.02)              # BULL
+        mym_vix_ok = (vix_price >= 15) and (vix_price < 20)   # MID
+        mym_active = mym_spx_ok and mym_vix_ok
 
         rules = {
             "M2K SHORT":           ("SPX>SMA90 & VIX<15",  (spx_price > sma90)  and (vix_price < 15)),
             "MES SHORT":           ("SPX>SMA125 & VIX<15", (spx_price > sma125) and (vix_price < 15)),
             "MNQ SHORT":           ("SPX<SMA150 & VIX>20", (spx_price < sma150) and (vix_price > 20)),
-            "MotoreBreakOut LONG": ("SPX>SMA125 & VIX<15", (spx_price > sma125) and (vix_price < 15)),
             "ZScoreCorr LONG":     ("SPX>SMA125 & VIX<20", (spx_price > sma125) and (vix_price < 20)),
-            "MES ZScore":          ("SPX<=125MA+2% & VIX>=15", mes_active),
             "MGC ZScore":          ("SPX>=125MA-2% & VIX<20", mgc_active),
-            "MNQ TrendFoll":       ("SPX>125MA+2% & VIX>=15", mnq_active), # <--- NUOVA
+            "MNQ TrendFoll":       ("SPX>125MA+2% & VIX>=15", mnq_active),
+            "Bias Intraweek":      ("SPX>125MA+2% & VIX<20", bias_active),
+            "Donchian Corr":       ("SPX>125MA+2% & VIX<20", donch_active),
+            "MYM Sushi":           ("SPX>125MA+2% & 15<=VIX<20", mym_active),
         }
         
         def _pct(a, b):
@@ -306,7 +317,7 @@ with tab2:
             "Margini": st.column_config.TextColumn(width="large"),
         }
     )
-    st.caption("Nota: logiche dei segnali semplificate per il monitoraggio; l’esecuzione reale segue i sistemi proprietari.")
+    st.caption("Nota: logiche dei segnali semplificate per il monitoraggio; l'esecuzione reale segue i sistemi proprietari.")
 
 
 # === TAB 3: ANALISI STORICA (AGGIORNATA) ===
@@ -324,43 +335,51 @@ with tab3:
     df_storico["STATUS_M2K"] = ((df_storico["Close"] > df_storico["SMA90"]) & (df_storico["VIX_Close"] < 15)).astype(int)
     df_storico["STATUS_MES"] = ((df_storico["Close"] > df_storico["SMA125"]) & (df_storico["VIX_Close"] < 15)).astype(int)
     df_storico["STATUS_MNQ"] = ((df_storico["Close"] < df_storico["SMA150"]) & (df_storico["VIX_Close"] > 20)).astype(int)
-    df_storico["STATUS_MOTORE"] = ((df_storico["Close"] > df_storico["SMA125"]) & (df_storico["VIX_Close"] < 15)).astype(int)
     df_storico["STATUS_ZSCORE"] = ((df_storico["Close"] > df_storico["SMA125"]) & (df_storico["VIX_Close"] < 20)).astype(int)
 
-    # MES ZScore (SMA125 + 2%)
-    cond_mes_spx = df_storico["Close"] <= (df_storico["SMA125"] * 1.02)
-    cond_mes_vix = df_storico["VIX_Close"] >= 15
-    df_storico["STATUS_MES_ZSCORE"] = (cond_mes_spx & cond_mes_vix).astype(int)
-
     # MGC ZScore (SMA125 +/- 2%)
-    # Active se NON Bear (SPX >= SMA125*0.98) AND NON High (VIX < 20)
     cond_mgc_spx = df_storico["Close"] >= (df_storico["SMA125"] * 0.98)
     cond_mgc_vix = df_storico["VIX_Close"] < 20
     df_storico["STATUS_MGC_ZSCORE"] = (cond_mgc_spx & cond_mgc_vix).astype(int)
 
     # MNQ TrendFollowing (SMA125 + 2%)
-    # Active se BULL (SPX > SMA125*1.02) AND NON LOW (VIX >= 15)
     cond_mnq_spx = df_storico["Close"] > (df_storico["SMA125"] * 1.02)
     cond_mnq_vix = df_storico["VIX_Close"] >= 15
     df_storico["STATUS_MNQ_TREND"] = (cond_mnq_spx & cond_mnq_vix).astype(int)
 
-    # 3. Crea la griglia di subplot (9 righe)
+    # Bias Intraweek Correlation (SMA125 + 2% AND VIX < 20)
+    cond_bias_spx = df_storico["Close"] > (df_storico["SMA125"] * 1.02)
+    cond_bias_vix = df_storico["VIX_Close"] < 20
+    df_storico["STATUS_BIAS_INTRAWEEK"] = (cond_bias_spx & cond_bias_vix).astype(int)
+
+    # Donchian Correlation (SMA125 + 2% AND VIX < 20)
+    cond_donch_spx = df_storico["Close"] > (df_storico["SMA125"] * 1.02)
+    cond_donch_vix = df_storico["VIX_Close"] < 20
+    df_storico["STATUS_DONCHIAN"] = (cond_donch_spx & cond_donch_vix).astype(int)
+
+    # MYM Sushi (SMA125 + 2% AND 15 <= VIX < 20)
+    cond_mym_spx = df_storico["Close"] > (df_storico["SMA125"] * 1.02)
+    cond_mym_vix = (df_storico["VIX_Close"] >= 15) & (df_storico["VIX_Close"] < 20)
+    df_storico["STATUS_MYM_SUSHI"] = (cond_mym_spx & cond_mym_vix).astype(int)
+
+    # 3. Crea la griglia di subplot (10 righe)
     fig_storico = make_subplots(
-        rows=9, # <--- 9 RIGHE
+        rows=10,
         cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.015,
-        row_heights=[0.28, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09], # Adattato
+        vertical_spacing=0.012,
+        row_heights=[0.25, 0.083, 0.083, 0.083, 0.083, 0.083, 0.083, 0.083, 0.083, 0.083],
         subplot_titles=(
             "SPX Close", 
             "M2K SHORT (SPX>90 & VIX<15)", 
             "MES SHORT (SPX>125 & VIX<15)", 
             "MNQ SHORT (SPX<150 & VIX>20)", 
-            "MotoreBreakOut LONG (SPX>125 & VIX<15)", 
             "ZScoreCorr LONG (SPX>125 & VIX<20)",
-            "MES ZScore (SPX<=125MA+2% & VIX>=15)",
             "MGC ZScore (SPX>=125MA-2% & VIX<20)",
-            "MNQ TrendFoll (SPX>125MA+2% & VIX>=15)" # <--- NUOVO TITOLO
+            "MNQ TrendFoll (SPX>125MA+2% & VIX>=15)",
+            "Bias Intraweek (SPX>125MA+2% & VIX<20)",
+            "Donchian Corr (SPX>125MA+2% & VIX<20)",
+            "MYM Sushi (SPX>125MA+2% & 15<=VIX<20)"
         )
     )
 
@@ -373,7 +392,7 @@ with tab3:
         line=dict(color="#2E86C1", width=2)
     ), row=1, col=1)
 
-    # 5. Aggiungi tracce Strategie (Righe 2-9)
+    # 5. Aggiungi tracce Strategie (Righe 2-10)
     
     # M2K SHORT (Rosso)
     fig_storico.add_trace(go.Scatter(
@@ -393,53 +412,59 @@ with tab3:
         fill='tozeroy', mode='lines', line=dict(color="#8E44AD", width=1)
     ), row=4, col=1)
     
-    # MotoreBreakOut LONG (Verde)
-    fig_storico.add_trace(go.Scatter(
-        x=df_storico.index, y=df_storico["STATUS_MOTORE"], name="MotoreBreakOut LONG",
-        fill='tozeroy', mode='lines', line=dict(color="#16A085", width=1)
-    ), row=5, col=1)
-    
     # ZScoreCorr LONG (Blu)
     fig_storico.add_trace(go.Scatter(
         x=df_storico.index, y=df_storico["STATUS_ZSCORE"], name="ZScoreCorr LONG",
         fill='tozeroy', mode='lines', line=dict(color="#2980B9", width=1)
-    ), row=6, col=1)
+    ), row=5, col=1)
 
-    # MES ZScore (Viola scuro) - RIGA 7
-    fig_storico.add_trace(go.Scatter(
-        x=df_storico.index, y=df_storico["STATUS_MES_ZSCORE"], name="MES ZScore",
-        fill='tozeroy', mode='lines', line=dict(color="#884EA0", width=1)
-    ), row=7, col=1)
-
-    # MGC ZScore (Lime Green) - RIGA 8
+    # MGC ZScore (Viola scuro) - RIGA 6
     fig_storico.add_trace(go.Scatter(
         x=df_storico.index, y=df_storico["STATUS_MGC_ZSCORE"], name="MGC ZScore",
         fill='tozeroy', mode='lines', line=dict(color="#7D3C98", width=1)
-    ), row=8, col=1)
+    ), row=6, col=1)
 
-    # MNQ TrendFollowing (Azzurro scuro / Teal) - RIGA 9
+    # MNQ TrendFollowing (Teal) - RIGA 7
     fig_storico.add_trace(go.Scatter(
         x=df_storico.index, y=df_storico["STATUS_MNQ_TREND"], name="MNQ Trend",
-        fill='tozeroy', mode='lines', line=dict(color="#117864", width=1) 
+        fill='tozeroy', mode='lines', line=dict(color="#117864", width=1)
+    ), row=7, col=1)
+
+    # Bias Intraweek (Verde lime) - RIGA 8
+    fig_storico.add_trace(go.Scatter(
+        x=df_storico.index, y=df_storico["STATUS_BIAS_INTRAWEEK"], name="Bias Intraweek",
+        fill='tozeroy', mode='lines', line=dict(color="#27AE60", width=1)
+    ), row=8, col=1)
+
+    # Donchian Correlation (Ciano) - RIGA 9
+    fig_storico.add_trace(go.Scatter(
+        x=df_storico.index, y=df_storico["STATUS_DONCHIAN"], name="Donchian Corr",
+        fill='tozeroy', mode='lines', line=dict(color="#17A2B8", width=1)
     ), row=9, col=1)
+
+    # MYM Sushi (Rosa/Magenta) - RIGA 10
+    fig_storico.add_trace(go.Scatter(
+        x=df_storico.index, y=df_storico["STATUS_MYM_SUSHI"], name="MYM Sushi",
+        fill='tozeroy', mode='lines', line=dict(color="#E91E63", width=1)
+    ), row=10, col=1)
 
     # 6. Configura Layout
     fig_storico.update_layout(
-        height=1200, # Aumentata l'altezza totale
+        height=1300,
         hovermode="x unified",
         showlegend=False,
         margin=dict(l=10, r=10, t=40, b=10),
         xaxis=dict(rangeslider=dict(visible=False)),
-        xaxis9=dict(rangeslider=dict(visible=True, thickness=0.08)) # Range slider sull'ultimo grafico (9)
+        xaxis10=dict(rangeslider=dict(visible=True, thickness=0.08))
     )
 
-    # Nascondi etichette assi X per i grafici 1-8
-    for i in range(1, 9):
+    # Nascondi etichette assi X per i grafici 1-9
+    for i in range(1, 10):
         fig_storico.update_xaxes(showticklabels=False, row=i, col=1)
     
     # Configura assi Y
     fig_storico.update_yaxes(title_text="Prezzo SPX", row=1, col=1)
-    for i in range(2, 10):
+    for i in range(2, 11):
         fig_storico.update_yaxes(
             title_text="Stato",
             range=[-0.1, 1.1], 
@@ -450,7 +475,7 @@ with tab3:
         
     # Migliora la leggibilità dei titoli dei subplot
     for annotation in fig_storico['layout']['annotations']:
-        annotation['font'] = dict(size=12)
+        annotation['font'] = dict(size=11)
         annotation['yanchor'] = 'bottom'
         annotation['y'] = annotation['y'] + 0.01
 
